@@ -16,9 +16,19 @@
 using namespace std;
 #define MAX_THREADS 4
 
-ThreadArgsInfo* threadArgArr = new ThreadArgsInfo[MAX_THREADS];
+struct GraphDetails threadArg[MAX_THREADS];
 pthread_t handles[MAX_THREADS];
+
+// part 2.1
 pthread_mutex_t graph_lock;
+
+// part 2.2
+std::vector<pthread_mutex_t *> node_locks;
+std::vector<pthread_attr_t *> attrs;
+
+// part 2.3 
+std::vector<pthread_spinlock_t *> node_spinlocks;
+
 
 struct GraphDetails {
     int myId;
@@ -108,22 +118,22 @@ for Source 8
 */
 
 
-// 2.1: course grain locking
+// 2.1: course-grain locking
 void* graphMutex(void* input) {
     // TODO: Need to access graph details through thread args
     // Currently working through a struct, see http://www.cse.cuhk.edu.hk/~ericlo/teaching/os/lab/9-PThread/Pass.html
 
     // We define variables locally from the input, for sake of simplicity
-    // TODO : UPDATE TO NEW STRUCTURE
     int myId = (int) (((struct GraphDetails*)input)->myId);;
     vector<int> rows = (vector<int>) (((struct GraphDetails *)input)->rows);
     vector<pair<int, int>> edgeDetails = (vector<pair<int, int>>) (((struct GraphDetails *)input)->edgeDetails);;
     int numNodes = (int) (((struct GraphDetails *)input)->numNodes);
     int sourceNode = (int) (((struct GraphDetails *)input)->sourceNode);
+    
 
-
-    vector<int> lastIteration(numNodes + 1);
-    vector<int> nextIteration(numNodes + 1);
+    
+    vector<int> lastIteration(numNodes);
+    vector<int> nextIteration(numNodes);
 
     // we set lastIteration[sourceNode] = 0;
     for(int index = 1; index < lastIteration.size(); index++) {
@@ -138,20 +148,20 @@ void* graphMutex(void* input) {
 
     bool done = false;
     while(!done) {
+        int firstCol = myId;
         int lastCol;
-        for(int index = myId + 1; index < rows.size(); index+=MAX_THREADS) {
-            if(index == rows.size() - 1) {
-                lastCol = edgeDetails.size();
-            } else {
-                lastCol = rows[index + 1];
-            }
-            for(int firstCol = rows[index]; firstCol <= lastCol; firstCol++) {
+        // THREAD DIVIDED BY NODES
+        for(int index = myId; index < rows.size(); index+= MAX_THREADS) {
+            lastCol = rows[index];
+
+            for(firstCol; firstCol <= lastCol; firstCol++) {
                 pthread_mutex_lock(&graph_lock);
                 if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
                     nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
                 }
                 pthread_mutex_unlock(&graph_lock);
             }
+
         }
 
         done = true;
@@ -162,11 +172,130 @@ void* graphMutex(void* input) {
             }
         }
         lastIteration = nextIteration;
+        for(int index = 1; index < lastIteration.size(); index++) {
+         cout << lastIteration[index] << endl;
+        }
     }
 }
 
-void* nodeMutex() { }
 
+// 2.2: fine-grain locking
+void* nodeMutex(void* input) {
+    // TODO: Need to access graph details through thread args
+    // Currently working through a struct, see http://www.cse.cuhk.edu.hk/~ericlo/teaching/os/lab/9-PThread/Pass.html
+
+    // We define variables locally from the input, for sake of simplicity
+    int myId = (int) (((struct GraphDetails*)input)->myId);;
+    vector<int> rows = (vector<int>) (((struct GraphDetails *)input)->rows);
+    vector<pair<int, int>> edgeDetails = (vector<pair<int, int>>) (((struct GraphDetails *)input)->edgeDetails);;
+    int numNodes = (int) (((struct GraphDetails *)input)->numNodes);
+    int sourceNode = (int) (((struct GraphDetails *)input)->sourceNode);
+    
+
+    
+    vector<int> lastIteration(numNodes);
+    vector<int> nextIteration(numNodes);
+
+    // we set lastIteration[sourceNode] = 0;
+    for(int index = 1; index < lastIteration.size(); index++) {
+        if(index != sourceNode) {
+            lastIteration[index] = std::numeric_limits<int>::max();
+            nextIteration[index] = std::numeric_limits<int>::max();
+        } else {
+            lastIteration[index] = 0;
+            nextIteration[index] = 0;
+        }
+    }
+
+    bool done = false;
+    while(!done) {
+        int firstCol = myId;
+        int lastCol;
+        // THREAD DIVIDED BY NODES
+        for(int index = myId; index < rows.size(); index+= MAX_THREADS) {
+            pthread_mutex_lock(node_locks[index]);
+            lastCol = rows[index];
+
+            for(firstCol; firstCol <= lastCol; firstCol++) {
+                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
+                    nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
+                }
+            }
+            pthread_mutex_unlock(node_locks[index]);
+        }
+
+        done = true;
+        for(int index = 1; index < lastIteration.size(); index++) {
+            if(lastIteration[index] != nextIteration[index]){
+                done = false;
+                break;
+            }
+        }
+        lastIteration = nextIteration;
+        for(int index = 1; index < lastIteration.size(); index++) {
+         cout << lastIteration[index] << endl;
+        }
+    }
+}
+
+
+void* nodeSpinLock(void* input) {
+    // TODO: Need to access graph details through thread args
+    // Currently working through a struct, see http://www.cse.cuhk.edu.hk/~ericlo/teaching/os/lab/9-PThread/Pass.html
+
+    // We define variables locally from the input, for sake of simplicity
+    int myId = (int) (((struct GraphDetails*)input)->myId);;
+    vector<int> rows = (vector<int>) (((struct GraphDetails *)input)->rows);
+    vector<pair<int, int>> edgeDetails = (vector<pair<int, int>>) (((struct GraphDetails *)input)->edgeDetails);;
+    int numNodes = (int) (((struct GraphDetails *)input)->numNodes);
+    int sourceNode = (int) (((struct GraphDetails *)input)->sourceNode);
+    
+    
+    vector<int> lastIteration(numNodes);
+    vector<int> nextIteration(numNodes);
+
+    // we set lastIteration[sourceNode] = 0;
+    for(int index = 1; index < lastIteration.size(); index++) {
+        if(index != sourceNode) {
+            lastIteration[index] = std::numeric_limits<int>::max();
+            nextIteration[index] = std::numeric_limits<int>::max();
+        } else {
+            lastIteration[index] = 0;
+            nextIteration[index] = 0;
+        }
+    }
+
+    bool done = false;
+    while(!done) {
+        int firstCol = myId;
+        int lastCol;
+        // THREAD DIVIDED BY NODES
+        for(int index = myId; index < rows.size(); index+= MAX_THREADS) {
+            pthread_spin_lock(node_spinlocks[index]);
+            lastCol = rows[index];
+
+            for(firstCol; firstCol <= lastCol; firstCol++) {
+                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
+                    nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
+                }
+            }
+            pthread_spin_unlock(node_spinlocks[index]);
+        }
+
+        done = true;
+        for(int index = 1; index < lastIteration.size(); index++) {
+            if(lastIteration[index] != nextIteration[index]){
+                done = false;
+                break;
+            }
+        }
+        lastIteration = nextIteration;
+        for(int index = 1; index < lastIteration.size(); index++) {
+         cout << lastIteration[index] << endl;
+        }
+    }
+
+}
 void* testSequentialBf() {
     vector<int> rows;
     vector<pair<int, int>> edgeDetails;
@@ -298,33 +427,35 @@ int main(int argc, char *argv[]) {
     tie(labels, rp, edgedetails, numNodes) = dimacToCsr("wiki.dimacs");
     sequentialBf(labels, rp, edgedetails, numNodes, 8);
     
-    /*
-    // DEFINE MASTER GRAPH
-    struct GraphDetails *masterGraph = (struct GraphDetails *) malloc(sizeof(struct GraphDetails)); 
-    // FILL IN WITH DETAILS
-    // graph -> rows = ;
-    // graph -> edgeDetails = ;
-    // graph -> numNodes;
-    // graph -> sourceNode;
-
-    // LOCK HANDELING
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_mutex_init(&graph_lock, NULL);
-
+    
     // BEGIN RUN TIME
-    uint64_t execTime; /*time in nanoseconds
+    uint64_t execTime; /*time in nanoseconds*/
     struct timespec tick, tock;
     clock_gettime(CLOCK_MONOTONIC_RAW, &tick);
 
+    // DEFINE GRAPH
+    // TODO: need to translate from DIMAC file
+    GraphDetails *masterGraph = new GraphDetails();
+    // FILL IN WITH DETAILS
+    // masterGraph -> rows = ;
+    // masterGraph -> edgeDetails = ;
+    // masterGraph -> numNodes;
+    // masterGraph -> sourceNode;
 
     //----------------------------------------------
 
     // Part 2.1: Mutex on the graph
-    for(int i = 0; i < MAX_THREADS; i++) {
-        // TODO: Make a ThreadArgsInfo struct per thread, paassing in 
+        // LOCK HANDELING
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_mutex_init(&graph_lock, NULL);
 
-        struct ThreadArgInfo* 
+    for(int i = 0; i < MAX_THREADS; i++) {
+        // TODO: I think we need to copy the GraphDetails graph struct for every thread - becuase
+        // we need to have a unique myId for every thread. Because we pass the address of the struct
+        //we can't have one object. This is my attempt at it below
+
+        // make a soft copy of mastergraphs and chaing myId to divide up threads
         threadArg[i] = *masterGraph;
         threadArg[i].myId = i;
         pthread_create(&handles[i], &attr, graphMutex, &threadArg[i]);
@@ -332,18 +463,59 @@ int main(int argc, char *argv[]) {
 
 
 
+    // Part 2.2: Mutex on the nodes
+    // initialize locks
+
+    // is rows and numNodes the same amount of node??? - prolly not cus rows is just outgoing right?
+    //  i think we just need to have a mutex for every node because we cannot tell right now which nodes will be used or not
+
+    for (int i = 0; i < masterGraph ->numNodes; i ++) {
+        pthread_attr_t attr;
+        attrs.push_back(&attr);
+        pthread_attr_init(attrs[i]);
+
+        pthread_mutex_t node_lock;
+        node_locks.push_back(&node_lock);
+        pthread_mutex_init(node_locks[i], NULL);
+    }
+
+    for(int i = 0; i < MAX_THREADS; i++) {
+        // make a soft copy of mastergraphs and chaing myId to divide up threads
+        threadArg[i] = *masterGraph;
+        threadArg[i].myId = i;
+        pthread_create(&handles[i], &attr, nodeMutex, &threadArg[i]);
+    }
 
 
-    //----------------------------------------------
 
-    // JOINING THREADS
-    // for (int i=0; i< MAX_THREADS; i++) {
-    //     pthread_join(handles[i], NULL);
-    // }
+    // Part 2.3: Spinlock on nodes
 
-    // PRINT TO FILE ONCE FINISHED 
+    // create spinlocks. See https://man7.org/linux/man-pages/man3/pthread_spin_init.3.html
+    // and https://man7.org/linux/man-pages/man3/pthread_spin_lock.3.html for documentation
+    for (int i = 0; i < masterGraph ->numNodes; i ++) {
+        pthread_spinlock_t node_spinlock;
+        node_spinlocks.push_back(&node_spinlock);
+        pthread_mutex_init(node_locks[i], NULL);
+
+        pthread_spin_init(node_spinlocks[i], PTHREAD_PROCESS_SHARED);
+    }
+
+    for(int i = 0; i < MAX_THREADS; i++) {
+        // make a soft copy of mastergraphs and chaing myId to divide up threads
+        threadArg[i] = *masterGraph;
+        threadArg[i].myId = i;
+        pthread_create(&handles[i], &attr, nodeMutex, &threadArg[i]);
+    }
 
 
+
+
+    // JOIN THREADS
+    for (int i=0; i< MAX_THREADS; i++) {
+        pthread_join(handles[i], NULL);
+    }
+
+    //---------------------------------------------
 
     // END RUN TIME
     clock_gettime(CLOCK_MONOTONIC_RAW, &tock);
@@ -351,7 +523,7 @@ int main(int argc, char *argv[]) {
     printf("\n ----PART 4---- \n elapsed process CPU time = %llu nanoseconds\n", (long long unsigned int)execTime);
 
 
-    pthread_exit(NULL);*/
+    pthread_exit(NULL);
     return 0;
     
 }
