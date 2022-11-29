@@ -17,7 +17,7 @@
 using namespace std;
 #define MAX_THREADS 4
 
-extern struct GraphDetails threadArg[MAX_THREADS];
+extern struct ThreadArgsInfo threadArg[MAX_THREADS];
 extern pthread_t handles[MAX_THREADS];
 
 // PART 2
@@ -42,11 +42,12 @@ std::atomic<bool> masterBool;
 
 
 struct GraphDetails {
-    int myId;
     vector<int> rows;
     vector<pair<int, int>> edgeDetails;
     int numNodes;
     int sourceNode;
+    vector<int> lastIteration;
+    vector<int> nextIteration;
 };
 
 struct ThreadArgsInfo {
@@ -135,16 +136,15 @@ void* graphMutex(void* input) {
     // Currently working through a struct, see http://www.cse.cuhk.edu.hk/~ericlo/teaching/os/lab/9-PThread/Pass.html
 
     // We define variables locally from the input, for sake of simplicity
-    int myId = (int) (((struct GraphDetails*)input)->myId);;
-    vector<int> rows = (vector<int>) (((struct GraphDetails *)input)->rows);
-    vector<pair<int, int>> edgeDetails = (vector<pair<int, int>>) (((struct GraphDetails *)input)->edgeDetails);;
-    int numNodes = (int) (((struct GraphDetails *)input)->numNodes);
-    int sourceNode = (int) (((struct GraphDetails *)input)->sourceNode);
+    int myId = (int) (((struct ThreadArgsInfo*)input)->myId);
+    vector<int> rows = (vector<int>) (((struct ThreadArgsInfo *)input)->masterGraph->rows);
+    vector<pair<int, int>> *edgeDetails = (vector<pair<int, int>> *) &(((struct ThreadArgsInfo *)input)->masterGraph->edgeDetails);
+    int numNodes = (int) (((struct ThreadArgsInfo *)input)->masterGraph->numNodes);
+    int sourceNode = (int) (((struct ThreadArgsInfo *)input)->masterGraph->sourceNode);
     
-
     
-    vector<int> lastIteration(numNodes);
-    vector<int> nextIteration(numNodes);
+    vector<int> *lastIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->lastIteration);
+    vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
     for(int index = 1; index < lastIteration.size(); index++) {
@@ -167,9 +167,9 @@ void* graphMutex(void* input) {
 
             for(firstCol; firstCol <= lastCol; firstCol++) {
                 pthread_mutex_lock(&graph_lock);
-                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
-                    nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
-                }
+                    if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails[firstCol].first]) {    
+                        nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
+                    }
                 pthread_mutex_unlock(&graph_lock);
             }
 
@@ -199,16 +199,16 @@ void* nodeMutex(void* input) {
     // Currently working through a struct, see http://www.cse.cuhk.edu.hk/~ericlo/teaching/os/lab/9-PThread/Pass.html
 
     // We define variables locally from the input, for sake of simplicity
-    int myId = (int) (((struct GraphDetails*)input)->myId);;
-    vector<int> rows = (vector<int>) (((struct GraphDetails *)input)->rows);
-    vector<pair<int, int>> edgeDetails = (vector<pair<int, int>>) (((struct GraphDetails *)input)->edgeDetails);;
-    int numNodes = (int) (((struct GraphDetails *)input)->numNodes);
-    int sourceNode = (int) (((struct GraphDetails *)input)->sourceNode);
+    int myId = (int) (((struct ThreadArgsInfo*)input)->myId);
+    vector<int> rows = (vector<int>) (((struct ThreadArgsInfo *)input)->masterGraph->rows);
+    vector<pair<int, int>> *edgeDetails = (vector<pair<int, int>> *) &(((struct ThreadArgsInfo *)input)->masterGraph->edgeDetails);
+    int numNodes = (int) (((struct ThreadArgsInfo *)input)->masterGraph->numNodes);
+    int sourceNode = (int) (((struct ThreadArgsInfo *)input)->masterGraph->sourceNode);
     
 
-    
-    vector<int> lastIteration(numNodes);
-    vector<int> nextIteration(numNodes);
+
+    vector<int> *lastIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->lastIteration);
+    vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
     for(int index = 1; index < lastIteration.size(); index++) {
@@ -231,8 +231,8 @@ void* nodeMutex(void* input) {
             lastCol = rows[index];
 
             for(firstCol; firstCol <= lastCol; firstCol++) {
-                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
-                    nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
+                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails->at(firstCol).first]) {    
+                    nextIteration[ edgeDetails->at(firstCol).first] = lastIteration[index] + edgeDetails->at(firstCol).second;
                 }
             }
             pthread_mutex_unlock(node_locks[index]);
@@ -259,15 +259,16 @@ void* nodeSpinLock(void* input) {
     // Currently working through a struct, see http://www.cse.cuhk.edu.hk/~ericlo/teaching/os/lab/9-PThread/Pass.html
 
     // We define variables locally from the input, for sake of simplicity
-    int myId = (int) (((struct GraphDetails*)input)->myId);;
-    vector<int> rows = (vector<int>) (((struct GraphDetails *)input)->rows);
-    vector<pair<int, int>> edgeDetails = (vector<pair<int, int>>) (((struct GraphDetails *)input)->edgeDetails);;
-    int numNodes = (int) (((struct GraphDetails *)input)->numNodes);
-    int sourceNode = (int) (((struct GraphDetails *)input)->sourceNode);
+    int myId = (int) (((struct ThreadArgsInfo*)input)->myId);
+    vector<int> rows = (vector<int>) (((struct ThreadArgsInfo *)input)->masterGraph->rows);
+    vector<pair<int, int>> *edgeDetails = (vector<pair<int, int>> *) &(((struct ThreadArgsInfo *)input)->masterGraph->edgeDetails);
+    int numNodes = (int) (((struct ThreadArgsInfo *)input)->masterGraph->numNodes);
+    int sourceNode = (int) (((struct ThreadArgsInfo *)input)->masterGraph->sourceNode);
     
+ 
     
-    vector<int> lastIteration(numNodes);
-    vector<int> nextIteration(numNodes);
+    vector<int> *lastIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->lastIteration);
+    vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
     for(int index = 1; index < lastIteration.size(); index++) {
@@ -290,7 +291,7 @@ void* nodeSpinLock(void* input) {
             lastCol = rows[index];
 
             for(firstCol; firstCol <= lastCol; firstCol++) {
-                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
+                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails[firstCol].first]) {    
                     nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
                 }
             }
@@ -313,19 +314,20 @@ void* nodeSpinLock(void* input) {
 
 }
 
+// 2.4: compare swap
 void* nodeCompareSwap(void* input) {
 
     // We define variables locally from the input, for sake of simplicity
-    int myId = (int) (((struct GraphDetails*)input)->myId);;
-    vector<int> rows = (vector<int>) (((struct GraphDetails *)input)->rows);
-    vector<pair<int, int>> edgeDetails = (vector<pair<int, int>>) (((struct GraphDetails *)input)->edgeDetails);;
-    int numNodes = (int) (((struct GraphDetails *)input)->numNodes);
-    int sourceNode = (int) (((struct GraphDetails *)input)->sourceNode);
+    int myId = (int) (((struct ThreadArgsInfo*)input)->myId);
+    vector<int> rows = (vector<int>) (((struct ThreadArgsInfo *)input)->masterGraph->rows);
+    vector<pair<int, int>> *edgeDetails = (vector<pair<int, int>> *) &(((struct ThreadArgsInfo *)input)->masterGraph->edgeDetails);
+    int numNodes = (int) (((struct ThreadArgsInfo *)input)->masterGraph->numNodes);
+    int sourceNode = (int) (((struct ThreadArgsInfo *)input)->masterGraph->sourceNode);
     
 
     
-    vector<int> lastIteration(numNodes);
-    vector<int> nextIteration(numNodes);
+    vector<int> *lastIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->lastIteration);
+    vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
     for(int index = 1; index < lastIteration.size(); index++) {
@@ -348,9 +350,9 @@ void* nodeCompareSwap(void* input) {
             bool expected = false;
             for(firstCol; firstCol <= lastCol; firstCol++) {
                 while (!masterBool.compare_exchange_weak(expected, true)){
-                    if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
-                        nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
-                    }
+                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails->at(firstCol).first]) {    
+                    nextIteration[ edgeDetails->at(firstCol).first] = lastIteration[index] + edgeDetails->at(firstCol).second;
+                }
                 }
 
             }
@@ -374,8 +376,68 @@ void* nodeCompareSwap(void* input) {
     }
 }
 
+// Part 3
+void* edgeDistribution(void* input) {
+    
+    int myId = (int) (((struct ThreadArgsInfo*)input)->myId);
+    vector<int> rows = (vector<int>) (((struct ThreadArgsInfo *)input)->masterGraph->rows);
+    vector<pair<int, int>> *edgeDetails = (vector<pair<int, int>> *) &(((struct ThreadArgsInfo *)input)->masterGraph->edgeDetails);
+    int numNodes = (int) (((struct ThreadArgsInfo *)input)->masterGraph->numNodes);
+    int sourceNode = (int) (((struct ThreadArgsInfo *)input)->masterGraph->sourceNode);
+    
+    vector<int> lastIteration(numNodes);
+    vector<int> nextIteration(numNodes);
+    int startEdge = (edgeDetails.size() / MAX_THREADS) * myId;
+    int endEdge = startEdge + (edgeDetails.size() / MAX_THREADS);
+    int startIndex;
+    for(int currIndex = myId; currIndex < rows.size(); currIndex++) {
+        if(rows[currIndex] >= startEdge) {
+                startIndex = currIndex;
+        }
+    }
+    bool done = false;
+    while(!done) {
+        int firstCol = startEdge;
+        // Find starting node edge 
+        bool lastNode = false;
+        for(int index = startIndex; index < rows.size(); index++) {
+            if(rows[index] >= endEdge) {
+                lastCol = std::min(rows[index], endEdge);
+                lastNode = true;
+            } else {
+                lastCol = rows[index];
+            }
+            bool expected = false;
+            for(firstCol; firstCol <= lastCol; firstCol++) {
+                while (!masterBool.compare_exchange_weak(expected, true)){
+                    if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails->at(firstCol).first]) {    
+                        nextIteration[ edgeDetails->at(firstCol).first] = lastIteration[index] + edgeDetails->at(firstCol).second;
+                    }
+                }
 
+            }
+            if(lastNode) {
+                break;
+            }
+        }
 
+        // wait for all the threads to complete so everything in nextIteration is updated
+        pthread_barrier_wait (&varBarrier);
+        
+        done = true;
+        for(int index = 1; index < lastIteration.size(); index++) {
+            if(lastIteration[index] != nextIteration[index]){
+                done = false;
+                break;
+            }
+        }
+        lastIteration = nextIteration;
+        for(int index = 1; index < lastIteration.size(); index++) {
+         cout << lastIteration[index] << endl;
+        }
+
+    }
+}
 
 void* testSequentialBf() {
     vector<int> rows;
@@ -488,8 +550,8 @@ tuple<vector<int>, vector<int>, vector<pair<int, int> >, int> dimacToCsr(string 
             edgedetails.push_back(make_pair(coo[i][1], coo[i][2]));
         } else {
             if(edgedetails[edgedetails.size() - 1].first == coo[i][1]) {
-                // takes the max value
-                edgedetails[edgedetails.size() - 1].second = max(coo[i][2], edgedetails[edgedetails.size() - 1].second);
+                // takes the min value
+                edgedetails[edgedetails.size() - 1].second = min(coo[i][2], edgedetails[edgedetails.size() - 1].second);
             } else {
                 edgedetails.push_back(make_pair(coo[i][1], coo[i][2]));
             }
@@ -523,6 +585,21 @@ int main(int argc, char *argv[]) {
     // masterGraph -> numNodes;
     // masterGraph -> sourceNode;
     
+    // Set up Iterations
+    for(int index = 1; index < numNodes; index++) {
+        if(index != masterGraph->sourceNode) {
+            lastIteration.pushback(std::numeric_limits<int>::max());
+            nextIteration.pushback(std::numeric_limits<int>::max());
+            // lastIteration[index] = std::numeric_limits<int>::max();
+            // nextIteration[index] = std::numeric_limits<int>::max();
+        } else {
+            lastIteration.pushback(0);
+            nextIteration.pushback(0);
+            // lastIteration[index] = 0;
+            // nextIteration[index] = 0;
+        }
+    }
+
     // Barrier
     pthread_barrier_init (&varBarrier,NULL,MAX_THREADS);
     //----------------------------------------------
@@ -539,7 +616,7 @@ int main(int argc, char *argv[]) {
         //we can't have one object. This is my attempt at it below
 
         // make a soft copy of mastergraphs and chaing myId to divide up threads
-        threadArg[i] = *masterGraph;
+        threadArg[i].masterGraph = *masterGraph;
         threadArg[i].myId = i;
         pthread_create(&handles[i], &attr, graphMutex, &threadArg[i]);
     }
@@ -564,7 +641,7 @@ int main(int argc, char *argv[]) {
 
     for(int i = 0; i < MAX_THREADS; i++) {
         // make a soft copy of mastergraphs and chaing myId to divide up threads
-        threadArg[i] = *masterGraph;
+        threadArg[i].masterGraph = *masterGraph;
         threadArg[i].myId = i;
         pthread_create(&handles[i], &attr, nodeMutex, &threadArg[i]);
     }
@@ -585,7 +662,7 @@ int main(int argc, char *argv[]) {
 
     for(int i = 0; i < MAX_THREADS; i++) {
         // make a soft copy of mastergraphs and chaing myId to divide up threads
-        threadArg[i] = *masterGraph;
+        threadArg[i].masterGraph = *masterGraph;
         threadArg[i].myId = i;
         pthread_create(&handles[i], &attr, nodeMutex, &threadArg[i]);
     }
