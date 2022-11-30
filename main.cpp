@@ -147,13 +147,13 @@ void* graphMutex(void* input) {
     vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
-    for(int index = 1; index < lastIteration.size(); index++) {
+    for(int index = 1; index < lastIteration->size(); index++) {
         if(index != sourceNode) {
-            lastIteration[index] = std::numeric_limits<int>::max();
-            nextIteration[index] = std::numeric_limits<int>::max();
+            (*lastIteration)[index] = std::numeric_limits<int>::max();
+            (*nextIteration)[index] = std::numeric_limits<int>::max();
         } else {
-            lastIteration[index] = 0;
-            nextIteration[index] = 0;
+            (*lastIteration)[index] = 0;
+            (*nextIteration)[index] = 0;
         }
     }
 
@@ -167,8 +167,8 @@ void* graphMutex(void* input) {
 
             for(firstCol; firstCol <= lastCol; firstCol++) {
                 pthread_mutex_lock(&graph_lock);
-                    if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails[firstCol].first]) {    
-                        nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
+                    if ((*lastIteration)[index] != std::numeric_limits<int>::max() && (*lastIteration)[index] + edgeDetails->at(firstCol).second < (*nextIteration)[(*edgeDetails)[firstCol].first]) {    
+                        (*nextIteration)[ (*edgeDetails)[firstCol].first] = (*lastIteration)[index] + (*edgeDetails)[firstCol].second;
                     }
                 pthread_mutex_unlock(&graph_lock);
             }
@@ -179,15 +179,15 @@ void* graphMutex(void* input) {
         pthread_barrier_wait (&varBarrier);
         
         done = true;
-        for(int index = 1; index < lastIteration.size(); index++) {
+        for(int index = 1; index < lastIteration->size(); index++) {
             if(lastIteration[index] != nextIteration[index]){
                 done = false;
                 break;
             }
         }
         lastIteration = nextIteration;
-        for(int index = 1; index < lastIteration.size(); index++) {
-         cout << lastIteration[index] << endl;
+        for(int index = 1; index < lastIteration->size(); index++) {
+         cout << (*lastIteration)[index] << endl;
         }
     }
 }
@@ -211,13 +211,13 @@ void* nodeMutex(void* input) {
     vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
-    for(int index = 1; index < lastIteration.size(); index++) {
+    for(int index = 1; index < lastIteration->size(); index++) {
         if(index != sourceNode) {
-            lastIteration[index] = std::numeric_limits<int>::max();
-            nextIteration[index] = std::numeric_limits<int>::max();
+            (*lastIteration)[index] = std::numeric_limits<int>::max();
+            (*nextIteration)[index] = std::numeric_limits<int>::max();
         } else {
-            lastIteration[index] = 0;
-            nextIteration[index] = 0;
+            (*lastIteration)[index] = 0;
+            (*nextIteration)[index] = 0;
         }
     }
 
@@ -231,8 +231,8 @@ void* nodeMutex(void* input) {
             lastCol = rows[index];
 
             for(firstCol; firstCol <= lastCol; firstCol++) {
-                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails->at(firstCol).first]) {    
-                    nextIteration[ edgeDetails->at(firstCol).first] = lastIteration[index] + edgeDetails->at(firstCol).second;
+                if ((*lastIteration)[index] != std::numeric_limits<int>::max() && (*lastIteration)[index] + edgeDetails->at(firstCol).second < (*nextIteration)[edgeDetails->at(firstCol).first]) {    
+                    (*nextIteration)[ edgeDetails->at(firstCol).first] = (*lastIteration)[index] + edgeDetails->at(firstCol).second;
                 }
             }
             pthread_mutex_unlock(node_locks[index]);
@@ -240,15 +240,15 @@ void* nodeMutex(void* input) {
 
         pthread_barrier_wait (&varBarrier);
         done = true;
-        for(int index = 1; index < lastIteration.size(); index++) {
+        for(int index = 1; index < lastIteration->size(); index++) {
             if(lastIteration[index] != nextIteration[index]){
                 done = false;
                 break;
             }
         }
         lastIteration = nextIteration;
-        for(int index = 1; index < lastIteration.size(); index++) {
-         cout << lastIteration[index] << endl;
+        for(int index = 1; index < lastIteration->size(); index++) {
+         cout << (*lastIteration)[index] << endl;
         }
     }
 }
@@ -271,13 +271,13 @@ void* nodeSpinLock(void* input) {
     vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
-    for(int index = 1; index < lastIteration.size(); index++) {
+    for(int index = 1; index < lastIteration->size(); index++) {
         if(index != sourceNode) {
-            lastIteration[index] = std::numeric_limits<int>::max();
-            nextIteration[index] = std::numeric_limits<int>::max();
+            (*lastIteration)[index] = std::numeric_limits<int>::max();
+            (*nextIteration)[index] = std::numeric_limits<int>::max();
         } else {
-            lastIteration[index] = 0;
-            nextIteration[index] = 0;
+            (*lastIteration)[index] = 0;
+            (*nextIteration)[index] = 0;
         }
     }
 
@@ -291,8 +291,8 @@ void* nodeSpinLock(void* input) {
             lastCol = rows[index];
 
             for(firstCol; firstCol <= lastCol; firstCol++) {
-                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails[firstCol].first]) {    
-                    nextIteration[ edgeDetails[firstCol].first] = lastIteration[index] + edgeDetails[firstCol].second;
+                if ((*lastIteration)[index] != std::numeric_limits<int>::max() && (*lastIteration)[index] + edgeDetails->at(firstCol).second < (*nextIteration)[(*edgeDetails)[firstCol].first]) {    
+                    (*nextIteration)[ (*edgeDetails)[firstCol].first] = (*lastIteration)[index] + (*edgeDetails)[firstCol].second;
                 }
             }
             pthread_spin_unlock(node_spinlocks[index]);
@@ -300,15 +300,15 @@ void* nodeSpinLock(void* input) {
 
         pthread_barrier_wait (&varBarrier);
         done = true;
-        for(int index = 1; index < lastIteration.size(); index++) {
+        for(int index = 1; index < lastIteration->size(); index++) {
             if(lastIteration[index] != nextIteration[index]){
                 done = false;
                 break;
             }
         }
         lastIteration = nextIteration;
-        for(int index = 1; index < lastIteration.size(); index++) {
-         cout << lastIteration[index] << endl;
+        for(int index = 1; index < lastIteration->size(); index++) {
+         cout << (*lastIteration)[index] << endl;
         }
     }
 
@@ -330,13 +330,13 @@ void* nodeCompareSwap(void* input) {
     vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
 
     // we set lastIteration[sourceNode] = 0;
-    for(int index = 1; index < lastIteration.size(); index++) {
+    for(int index = 1; index < lastIteration->size(); index++) {
         if(index != sourceNode) {
-            lastIteration[index] = std::numeric_limits<int>::max();
-            nextIteration[index] = std::numeric_limits<int>::max();
+            (*lastIteration)[index] = std::numeric_limits<int>::max();
+            (*nextIteration)[index] = std::numeric_limits<int>::max();
         } else {
-            lastIteration[index] = 0;
-            nextIteration[index] = 0;
+            (*lastIteration)[index] = 0;
+            (*nextIteration)[index] = 0;
         }
     }
 
@@ -350,8 +350,8 @@ void* nodeCompareSwap(void* input) {
             bool expected = false;
             for(firstCol; firstCol <= lastCol; firstCol++) {
                 while (!masterBool.compare_exchange_weak(expected, true)){
-                if (lastIteration[index] != std::numeric_limits<int>::max() && lastIteration[index] + edgeDetails->at(firstCol).second < nextIteration[edgeDetails->at(firstCol).first]) {    
-                    nextIteration[ edgeDetails->at(firstCol).first] = lastIteration[index] + edgeDetails->at(firstCol).second;
+                if ((*lastIteration)[index] != std::numeric_limits<int>::max() && (*lastIteration)[index] + edgeDetails->at(firstCol).second < (*nextIteration)[edgeDetails->at(firstCol).first]) {    
+                    (*nextIteration)[ edgeDetails->at(firstCol).first] = (*lastIteration)[index] + edgeDetails->at(firstCol).second;
                 }
                 }
 
@@ -363,15 +363,15 @@ void* nodeCompareSwap(void* input) {
         pthread_barrier_wait (&varBarrier);
         
         done = true;
-        for(int index = 1; index < lastIteration.size(); index++) {
+        for(int index = 1; index < lastIteration->size(); index++) {
             if(lastIteration[index] != nextIteration[index]){
                 done = false;
                 break;
             }
         }
         lastIteration = nextIteration;
-        for(int index = 1; index < lastIteration.size(); index++) {
-         cout << lastIteration[index] << endl;
+        for(int index = 1; index < lastIteration->size(); index++) {
+         cout << (*lastIteration)[index] << endl;
         }
     }
 }
@@ -387,8 +387,8 @@ void* edgeDistribution(void* input) {
     
     vector<int> lastIteration(numNodes);
     vector<int> nextIteration(numNodes);
-    int startEdge = (edgeDetails.size() / MAX_THREADS) * myId;
-    int endEdge = startEdge + (edgeDetails.size() / MAX_THREADS);
+    int startEdge = (edgeDetails->size() / MAX_THREADS) * myId;
+    int endEdge = startEdge + (edgeDetails->size() / MAX_THREADS);
     int startIndex;
     for(int currIndex = myId; currIndex < rows.size(); currIndex++) {
         if(rows[currIndex] >= startEdge) {
@@ -398,6 +398,7 @@ void* edgeDistribution(void* input) {
     bool done = false;
     while(!done) {
         int firstCol = startEdge;
+        int lastCol;
         // Find starting node edge 
         bool lastNode = false;
         for(int index = startIndex; index < rows.size(); index++) {
@@ -567,14 +568,19 @@ int main(int argc, char *argv[]) {
     vector<int> rp;
     vector<pair<int, int> > edgedetails; 
     int numNodes;
-    tie(labels, rp, edgedetails, numNodes) = dimacToCsr("wiki.dimacs");
-    sequentialBf(labels, rp, edgedetails, numNodes, 8);
+    tie(labels, rp, edgedetails, numNodes) = dimacToCsr("sample.dimacs");
+    //sequentialBf(labels, rp, edgedetails, numNodes, 1);
     
     
     // BEGIN RUN TIME
     uint64_t execTime; /*time in nanoseconds*/
     struct timespec tick, tock;
     clock_gettime(CLOCK_MONOTONIC_RAW, &tick);
+     sequentialBf(labels, rp, edgedetails, numNodes, 1);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tock);
+    execTime = 1000000000 * (tock.tv_sec - tick.tv_sec) + tock.tv_nsec - tick.tv_nsec;
+    printf("\n ----PART 4---- \n elapsed process CPU time = %llu nanoseconds\n", (long long unsigned int)execTime);
+    return 0;
 
     // DEFINE GRAPH
     // TODO: need to translate from DIMAC file
@@ -584,17 +590,19 @@ int main(int argc, char *argv[]) {
     // masterGraph -> edgeDetails = ;
     // masterGraph -> numNodes;
     // masterGraph -> sourceNode;
-    
+    // sample vectors to get rid of errors
+    vector<int> lastIteration;
+    vector<int> nextIteration;
     // Set up Iterations
     for(int index = 1; index < numNodes; index++) {
         if(index != masterGraph->sourceNode) {
-            lastIteration.pushback(std::numeric_limits<int>::max());
-            nextIteration.pushback(std::numeric_limits<int>::max());
+            lastIteration.push_back(std::numeric_limits<int>::max());
+            nextIteration.push_back(std::numeric_limits<int>::max());
             // lastIteration[index] = std::numeric_limits<int>::max();
             // nextIteration[index] = std::numeric_limits<int>::max();
         } else {
-            lastIteration.pushback(0);
-            nextIteration.pushback(0);
+            lastIteration.push_back(0);
+            nextIteration.push_back(0);
             // lastIteration[index] = 0;
             // nextIteration[index] = 0;
         }
@@ -616,7 +624,7 @@ int main(int argc, char *argv[]) {
         //we can't have one object. This is my attempt at it below
 
         // make a soft copy of mastergraphs and chaing myId to divide up threads
-        threadArg[i].masterGraph = *masterGraph;
+        threadArg[i].masterGraph = masterGraph;
         threadArg[i].myId = i;
         pthread_create(&handles[i], &attr, graphMutex, &threadArg[i]);
     }
@@ -641,7 +649,7 @@ int main(int argc, char *argv[]) {
 
     for(int i = 0; i < MAX_THREADS; i++) {
         // make a soft copy of mastergraphs and chaing myId to divide up threads
-        threadArg[i].masterGraph = *masterGraph;
+        threadArg[i].masterGraph = masterGraph;
         threadArg[i].myId = i;
         pthread_create(&handles[i], &attr, nodeMutex, &threadArg[i]);
     }
@@ -662,7 +670,7 @@ int main(int argc, char *argv[]) {
 
     for(int i = 0; i < MAX_THREADS; i++) {
         // make a soft copy of mastergraphs and chaing myId to divide up threads
-        threadArg[i].masterGraph = *masterGraph;
+        threadArg[i].masterGraph = masterGraph;
         threadArg[i].myId = i;
         pthread_create(&handles[i], &attr, nodeMutex, &threadArg[i]);
     }
