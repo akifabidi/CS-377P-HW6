@@ -42,10 +42,12 @@ std::atomic<bool> masterBool;
 
 
 struct GraphDetails {
+    vector<int> labels;
     vector<int> rows;
     vector<pair<int, int>> edgeDetails;
     int numNodes;
     int sourceNode;
+    vector<int> currIteration;
     vector<int> lastIteration;
     vector<int> nextIteration;
 };
@@ -68,23 +70,13 @@ void relaxEdge(int currentNode, int destNode, int edgeSize, vector<int> nextIter
     //cout << "after" << currentNode << "  " << destNode << "  " << edgeSize << "  " << nextIteration[destNode] << "  "<< lastIteration[currentNode] << endl;
 }
 
-int sequentialBf(vector<int> labels, vector<int> rows, vector<pair<int, int>> edgeDetails, int numNodes, int sourceNode) { 
-    vector<int> lastIteration(numNodes + 1);
-    vector<int> nextIteration(numNodes + 1);
+vector<int> sequentialBf(vector<int> labels, vector<int> rows, vector<pair<int, int>> edgeDetails, int numNodes, vector<int> lastIteration) { 
 
-    // we set lastIteration[sourceNode] = 0;
-    for(int index = 1; index < lastIteration.size(); index++) {
-        if(index != sourceNode) {
-            lastIteration[index] = std::numeric_limits<int>::max();
-            nextIteration[index] = std::numeric_limits<int>::max();
-        } else {
-            lastIteration[index] = 0;
-            nextIteration[index] = 0;
-        }
-    }
-
-    bool done = false;
-    while(!done) {
+    bool notDone = true;
+    int iteration = 0;
+    while(notDone) {
+        iteration++;
+        notDone = false;
         int lastCol;
         for(int index = 1; index < rows.size(); index++) {
             if(index == rows.size() - 1) {
@@ -93,27 +85,20 @@ int sequentialBf(vector<int> labels, vector<int> rows, vector<pair<int, int>> ed
                 lastCol = rows[index + 1];
             }
             for(int firstCol = rows[index]; firstCol < lastCol; firstCol++) {
-                if (lastIteration[labels[index]]!= std::numeric_limits<int>::max() && lastIteration[labels[index]] + edgeDetails[firstCol].second < nextIteration[edgeDetails[firstCol].first]) {    
-                    nextIteration[ edgeDetails[firstCol].first] = lastIteration[labels[index]] + edgeDetails[firstCol].second;
+                if (lastIteration[labels[index]]!= std::numeric_limits<int>::max() && lastIteration[labels[index]] + edgeDetails[firstCol].second < lastIteration[edgeDetails[firstCol].first]) {   
+                    lastIteration[ edgeDetails[firstCol].first] = lastIteration[labels[index]] + edgeDetails[firstCol].second;
+                    notDone = true;
                 }
             }
 
         }
-
-        done = true;
-        for(int index = 1; index < lastIteration.size(); index++) {
-            if(lastIteration[index] != nextIteration[index]){
-                done = false;
-                break;
-            }
+        if(!notDone) {
+            break;
         }
-        lastIteration = nextIteration;
+        //lastIteration = nextIteration;
     }
-    std::ofstream outfile ("sspDetailsNY.dimacs");
-    for (int i = 1; i < nextIteration.size(); i++) {
-        outfile << i << "  " << nextIteration[i] << endl;
-    }
-    
+    cout << '\n' << iteration << endl;
+    return lastIteration;//nextIteration;  
 }
 
 /*
@@ -568,18 +553,31 @@ int main(int argc, char *argv[]) {
     vector<int> rp;
     vector<pair<int, int> > edgedetails; 
     int numNodes;
-    tie(labels, rp, edgedetails, numNodes) = dimacToCsr("sample.dimacs");
-    //sequentialBf(labels, rp, edgedetails, numNodes, 1);
-    
-    
+    tie(labels, rp, edgedetails, numNodes) = dimacToCsr("rmat.dimacs");
+    // part 1 code
+    vector<int> currIteration(numNodes + 1);
+    int sourceNode = 1;
+    // we set lastIteration[sourceNode] = 0;
+    for(int index = 1; index < currIteration.size(); index++) {
+        if(index != sourceNode) {
+            currIteration[index] = std::numeric_limits<int>::max();
+        } else {
+            currIteration[index] = 0;
+        }
+    }
     // BEGIN RUN TIME
     uint64_t execTime; /*time in nanoseconds*/
     struct timespec tick, tock;
     clock_gettime(CLOCK_MONOTONIC_RAW, &tick);
-     sequentialBf(labels, rp, edgedetails, numNodes, 1);
+    // part 1 code
+    vector<int> solution = sequentialBf(labels, rp, edgedetails, numNodes, currIteration/*, nextIteration*/);
     clock_gettime(CLOCK_MONOTONIC_RAW, &tock);
     execTime = 1000000000 * (tock.tv_sec - tick.tv_sec) + tock.tv_nsec - tick.tv_nsec;
     printf("\n ----PART 4---- \n elapsed process CPU time = %llu nanoseconds\n", (long long unsigned int)execTime);
+    std::ofstream outfile ("sspDetailsNY.dimacs");
+    for (int i = 1; i < solution.size(); i++) {
+        outfile << i << "  " << solution[i] << endl;
+    }
     return 0;
 
     // DEFINE GRAPH
@@ -587,24 +585,18 @@ int main(int argc, char *argv[]) {
     GraphDetails *masterGraph = new GraphDetails();
     // FILL IN WITH DETAILS
     // masterGraph -> rows = ;
-    // masterGraph -> edgeDetails = ;
-    // masterGraph -> numNodes;
-    // masterGraph -> sourceNode;
-    // sample vectors to get rid of errors
-    vector<int> lastIteration;
-    vector<int> nextIteration;
+    masterGraph -> edgeDetails = edgedetails;
+    masterGraph -> numNodes = numNodes;
+    masterGraph -> sourceNode = sourceNode;
+    
     // Set up Iterations
-    for(int index = 1; index < numNodes; index++) {
+    
+    currIteration.push_back(std::numeric_limits<int>::max());
+    for(int index = 1; index <= numNodes; index++) {
         if(index != masterGraph->sourceNode) {
-            lastIteration.push_back(std::numeric_limits<int>::max());
-            nextIteration.push_back(std::numeric_limits<int>::max());
-            // lastIteration[index] = std::numeric_limits<int>::max();
-            // nextIteration[index] = std::numeric_limits<int>::max();
+            currIteration.push_back(std::numeric_limits<int>::max());
         } else {
-            lastIteration.push_back(0);
-            nextIteration.push_back(0);
-            // lastIteration[index] = 0;
-            // nextIteration[index] = 0;
+            currIteration.push_back(0);
         }
     }
 
@@ -629,7 +621,12 @@ int main(int argc, char *argv[]) {
         pthread_create(&handles[i], &attr, graphMutex, &threadArg[i]);
     }
 
+    for (int i=0; i< MAX_THREADS; i++) {
+        pthread_join(handles[i], NULL);
+    }
 
+    pthread_exit(NULL);
+    return 0;
 
     // Part 2.2: Mutex on the nodes
     // initialize locks
