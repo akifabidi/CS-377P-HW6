@@ -15,10 +15,16 @@
 #include <atomic>
 
 using namespace std;
-#define MAX_THREADS 4
+#define MAX_THREADS 2
 
-extern struct ThreadArgsInfo threadArg[MAX_THREADS];
-extern pthread_t handles[MAX_THREADS];
+struct ThreadArgsInfo {
+    int myId;
+    struct GraphDetails *masterGraph;
+};
+
+struct ThreadArgsInfo threadArg[MAX_THREADS];
+pthread_t handles[MAX_THREADS];
+bool isDone = false;
 
 // PART 2
 pthread_barrier_t varBarrier;
@@ -52,10 +58,7 @@ struct GraphDetails {
     vector<int> nextIteration;
 };
 
-struct ThreadArgsInfo {
-    int myId;
-    struct GraphDetails *masterGraph;
-};
+
 
 // main graph - details are saved here so that all threads access same struct in the heap
 struct GraphDetails *mainGraph = (struct GraphDetails*) malloc(sizeof(struct GraphDetails));
@@ -122,58 +125,41 @@ void* graphMutex(void* input) {
 
     // We define variables locally from the input, for sake of simplicity
     int myId = (int) (((struct ThreadArgsInfo*)input)->myId);
+    vector<int> labels = (vector<int>) (((struct ThreadArgsInfo *)input)->masterGraph->labels); 
     vector<int> rows = (vector<int>) (((struct ThreadArgsInfo *)input)->masterGraph->rows);
     vector<pair<int, int>> *edgeDetails = (vector<pair<int, int>> *) &(((struct ThreadArgsInfo *)input)->masterGraph->edgeDetails);
     int numNodes = (int) (((struct ThreadArgsInfo *)input)->masterGraph->numNodes);
     int sourceNode = (int) (((struct ThreadArgsInfo *)input)->masterGraph->sourceNode);
-    
-    
-    vector<int> *lastIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->lastIteration);
-    vector<int> *nextIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->nextIteration);
+    vector<int> *currIteration = (vector<int> *) &(((struct ThreadArgsInfo *)input)->masterGraph->currIteration);
 
-    // we set lastIteration[sourceNode] = 0;
-    for(int index = 1; index < lastIteration->size(); index++) {
-        if(index != sourceNode) {
-            (*lastIteration)[index] = std::numeric_limits<int>::max();
-            (*nextIteration)[index] = std::numeric_limits<int>::max();
-        } else {
-            (*lastIteration)[index] = 0;
-            (*nextIteration)[index] = 0;
-        }
-    }
-
-    bool done = false;
-    while(!done) {
+    while(!isDone) {
+        pthread_barrier_wait (&varBarrier);
+        isDone = true;
         int firstCol = myId;
         int lastCol;
         // THREAD DIVIDED BY NODES
-        for(int index = myId; index < rows.size(); index+= MAX_THREADS) {
-            lastCol = rows[index];
-
-            for(firstCol; firstCol <= lastCol; firstCol++) {
+        int part = rows.size() / MAX_THREADS;
+        int nextPart = part * (myId + 1);
+        for(int index = myId * part; index < nextPart; index++) {
+            if(index == rows.size() - 1) {
+                lastCol = edgeDetails->size();
+            } else {
+                lastCol = rows[index + 1];
+            }
+            for(int firstCol = rows[index]; firstCol < lastCol; firstCol++) {
                 pthread_mutex_lock(&graph_lock);
-                    if ((*lastIteration)[index] != std::numeric_limits<int>::max() && (*lastIteration)[index] + edgeDetails->at(firstCol).second < (*nextIteration)[(*edgeDetails)[firstCol].first]) {    
-                        (*nextIteration)[ (*edgeDetails)[firstCol].first] = (*lastIteration)[index] + (*edgeDetails)[firstCol].second;
-                    }
+                if ((*currIteration)[labels[index]]!= std::numeric_limits<int>::max() && (*currIteration)[labels[index]] + (*edgeDetails)[firstCol].second < (*currIteration)[(*edgeDetails)[firstCol].first]) {   
+                    (*currIteration)[ (*edgeDetails)[firstCol].first] = (*currIteration)[labels[index]] + (*edgeDetails)[firstCol].second;
+                    isDone = false;
+                }
+                cout << myId << endl;
                 pthread_mutex_unlock(&graph_lock);
             }
-
         }
-
+        cout << "reached";
         // wait for all the threads to complete so everything in nextIteration is updated
         pthread_barrier_wait (&varBarrier);
-        
-        done = true;
-        for(int index = 1; index < lastIteration->size(); index++) {
-            if(lastIteration[index] != nextIteration[index]){
-                done = false;
-                break;
-            }
-        }
-        lastIteration = nextIteration;
-        for(int index = 1; index < lastIteration->size(); index++) {
-         cout << (*lastIteration)[index] << endl;
-        }
+        cout << " " << isDone;
     }
 }
 
@@ -553,50 +539,51 @@ int main(int argc, char *argv[]) {
     vector<int> rp;
     vector<pair<int, int> > edgedetails; 
     int numNodes;
-    tie(labels, rp, edgedetails, numNodes) = dimacToCsr("rmat.dimacs");
-    // part 1 code
-    vector<int> currIteration(numNodes + 1);
+    tie(labels, rp, edgedetails, numNodes) = dimacToCsr("sample.dimacs");
     int sourceNode = 1;
+
+    // part 1 code
+    //vector<int> currIteration(numNodes + 1);
     // we set lastIteration[sourceNode] = 0;
-    for(int index = 1; index < currIteration.size(); index++) {
+    /*for(int index = 1; index < currIteration.size(); index++) {
         if(index != sourceNode) {
             currIteration[index] = std::numeric_limits<int>::max();
         } else {
             currIteration[index] = 0;
         }
-    }
+    }*/
     // BEGIN RUN TIME
     uint64_t execTime; /*time in nanoseconds*/
     struct timespec tick, tock;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &tick);
+    //clock_gettime(CLOCK_MONOTONIC_RAW, &tick);
     // part 1 code
-    vector<int> solution = sequentialBf(labels, rp, edgedetails, numNodes, currIteration/*, nextIteration*/);
-    clock_gettime(CLOCK_MONOTONIC_RAW, &tock);
-    execTime = 1000000000 * (tock.tv_sec - tick.tv_sec) + tock.tv_nsec - tick.tv_nsec;
-    printf("\n ----PART 4---- \n elapsed process CPU time = %llu nanoseconds\n", (long long unsigned int)execTime);
-    std::ofstream outfile ("sspDetailsNY.dimacs");
+    //vector<int> solution = sequentialBf(labels, rp, edgedetails, numNodes, currIteration/*, nextIteration*/);
+    //clock_gettime(CLOCK_MONOTONIC_RAW, &tock);
+    //execTime = 1000000000 * (tock.tv_sec - tick.tv_sec) + tock.tv_nsec - tick.tv_nsec;
+    //printf("\n ----PART 4---- \n elapsed process CPU time = %llu nanoseconds\n", (long long unsigned int)execTime);
+    /*std::ofstream outfile ("sspDetailsNY.dimacs");
     for (int i = 1; i < solution.size(); i++) {
         outfile << i << "  " << solution[i] << endl;
-    }
-    return 0;
+    }*/
 
     // DEFINE GRAPH
     // TODO: need to translate from DIMAC file
     GraphDetails *masterGraph = new GraphDetails();
     // FILL IN WITH DETAILS
-    // masterGraph -> rows = ;
+    masterGraph -> labels = labels;
+    masterGraph -> rows = rp;
     masterGraph -> edgeDetails = edgedetails;
     masterGraph -> numNodes = numNodes;
     masterGraph -> sourceNode = sourceNode;
     
     // Set up Iterations
     
-    currIteration.push_back(std::numeric_limits<int>::max());
+    masterGraph -> currIteration.push_back(std::numeric_limits<int>::max());
     for(int index = 1; index <= numNodes; index++) {
         if(index != masterGraph->sourceNode) {
-            currIteration.push_back(std::numeric_limits<int>::max());
+            masterGraph -> currIteration.push_back(std::numeric_limits<int>::max());
         } else {
-            currIteration.push_back(0);
+            masterGraph -> currIteration.push_back(0);
         }
     }
 
@@ -609,7 +596,7 @@ int main(int argc, char *argv[]) {
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_mutex_init(&graph_lock, NULL);
-
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tick);
     for(int i = 0; i < MAX_THREADS; i++) {
         // TODO: I think we need to copy the GraphDetails graph struct for every thread - becuase
         // we need to have a unique myId for every thread. Because we pass the address of the struct
@@ -624,7 +611,13 @@ int main(int argc, char *argv[]) {
     for (int i=0; i< MAX_THREADS; i++) {
         pthread_join(handles[i], NULL);
     }
-
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tock);
+    execTime = 1000000000 * (tock.tv_sec - tick.tv_sec) + tock.tv_nsec - tick.tv_nsec;
+    printf("\n ----PART 4---- \n elapsed process CPU time = %llu nanoseconds\n", (long long unsigned int)execTime);
+    std::ofstream outfile ("sspDetailsNY.dimacs");
+    for (int i = 1; i < masterGraph->currIteration.size(); i++) {
+        outfile << i << "  " << masterGraph->currIteration[i] << endl;
+    }
     pthread_exit(NULL);
     return 0;
 
